@@ -21,6 +21,10 @@ def run():
             classifier.train()
         elif FLAGS.mode == 'test':
             classifier.test()
+        elif FLAGS.mode == 'test_f':
+            classifier.test_f()
+        elif FLAGS.mode == 'val':
+            classifier.val()
 
 if __name__ == '__main__':
 	run()

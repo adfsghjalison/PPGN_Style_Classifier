@@ -27,7 +27,7 @@ class sentiment_classifier(object):
     self.dictionary = self.read_json(self.dict_file)
     self.num_words = len(self.dictionary)
     self.bos = self.dictionary['__BOS__']
-    self.eos = self.dictionary['__END__']
+    self.eos = self.dictionary['__EOS__']
     self.unk = self.dictionary['__UNK__']
     self.build_model()
     self.saver = tf.train.Saver(tf.all_variables(), max_to_keep=5)
@@ -61,7 +61,7 @@ class sentiment_classifier(object):
     self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.cost)
 
     ###testing part
-    self.socre = tf.sigmoid(pred)
+    self.score = tf.sigmoid(pred)
     pred_sig = tf.cast(tf.greater(tf.sigmoid(pred), 0.5), tf.float32)
     correct_ped = tf.equal(pred_sig,self.target)
     self.accuracy = tf.reduce_mean(tf.cast(correct_ped, tf.float32))
@@ -79,7 +79,7 @@ class sentiment_classifier(object):
 
   def get_score(self, input_idlist):
     feed_dict = { self.encoder_inputs: input_idlist }
-    output_feed = [self.socre]
+    output_feed = [self.score]
     outputs = self.sess.run(output_feed, feed_dict=feed_dict)
     return outputs[0]
 
@@ -94,8 +94,9 @@ class sentiment_classifier(object):
     data[self.max_length-1] = self.eos
     word_count = 1
     for word in input_sentence.split():
+      word = word.decode('utf8')
       if word_count>=self.max_length-1:
-        break;
+        break
       if word in self.dictionary:
         data[word_count] = self.dictionary[word]
       else:
@@ -109,17 +110,19 @@ class sentiment_classifier(object):
       print ('building dataset...')
       x_data = []
       y_data = []
+      sen = []
       with open(fp, 'r') as file:
         un_parse = file.readlines()
         for line in un_parse:
           line = line.strip('\n').split(' +++$+++ ')
           y_data.append([int(line[0])])
           x_data.append(self.tokenizer(line[1]))
-      return x_data, y_data
+          sen.append(line[1])
+      return x_data, y_data, sen
     else:
       raise ValueError('Can not find dictionary file %s' % (fp) )
 
-  def get_batch(self, x, y):
+  def get_batch(self, x, y, sen = None):
     i = 0
     while i < len(x):
       start = i
@@ -128,6 +131,9 @@ class sentiment_classifier(object):
         end = len(x)
       x_batch = x[start:end]
       y_batch = y[start:end]
+      if sen != None:
+        sen_batch = sen[start:end]
+        yield x_batch, y_batch, sen_batch
       yield x_batch, y_batch
       i = end
 
@@ -140,8 +146,8 @@ class sentiment_classifier(object):
       print("Creating model with fresh parameters.")
       self.sess.run(tf.global_variables_initializer())
 
-    x_train, y_train = self.build_dataset()
-    x_test, y_test = self.build_dataset(f='source_test')
+    x_train, y_train, sen = self.build_dataset()
+    x_test, y_test, sen = self.build_dataset(f='source_test')
     print ("start training...")
   
     step = 0
@@ -172,6 +178,20 @@ class sentiment_classifier(object):
       if step >= self.num_step:
         break
 
+  def val(self):
+    print ('loading previous model...')
+    self.saver.restore(self.sess, tf.train.latest_checkpoint(self.model_dir))
+    
+    x_d, y_d, sen_d = self.build_dataset(f='source_test')
+    _acc = 0.0
+    cnt = 0
+
+    for x, y in self.get_batch(x_d, y_d):
+      _, acc = self.step(x, y, True)
+      _acc += acc*len(x)
+      cnt += len(x)
+    _acc /= cnt
+    print ("source_test Acc : {}".format(_acc))
 
   def test(self):
     print ('loading previous model...')
@@ -185,4 +205,28 @@ class sentiment_classifier(object):
       #print (data)
       score = self.get_score(np.array([data]))
       print ('score: ' , score[0][0])
+
+  def test_f(self):
+    print ('loading previous model...')
+    self.saver.restore(self.sess, tf.train.latest_checkpoint(self.model_dir))
+    
+    x_d, y_d, sen_d = self.build_dataset(f='source_train')
+    f = open(os.path.join(self.data_dir, 'new_data'), 'w')
+    cnt0, cnt1 = 0, 0
+
+    for x, y, sen in self.get_batch(x_d, y_d, sen_d):
+      score = self.get_score(x)
+
+      for l, a, s in zip(sen, y, score):
+        a, s = a[0], s[0]
+        if s > 0.8:
+          f.write('1 +++$+++ ' + l + '\n')
+          print l, ' -> ', a, ',', s
+          cnt1 += 1
+        elif s < 0.2:
+          f.write('0 +++$+++ ' + l + '\n')
+          print l, ' -> ', a, ',', s
+          cnt0 += 1
+    f.close()
+    print "Count -> 0 : [{}] , 1 : [{}]".format(cnt0, cnt1)
 
