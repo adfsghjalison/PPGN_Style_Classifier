@@ -21,8 +21,8 @@ def run():
             classifier.train()
         elif FLAGS.mode == 'test':
             classifier.test()
-        elif FLAGS.mode == 'test_f':
-            classifier.test_f()
+        elif FLAGS.mode == 'generate':
+            classifier.generate()
         elif FLAGS.mode == 'val':
             classifier.val()
 

@@ -1,4 +1,6 @@
-data/*
-model/*
+data/
+model/
+_data/
+_model/
 *.pyc
 

@@ -91,7 +91,6 @@ class sentiment_classifier(object):
   def tokenizer(self, input_sentence):
     data = [self.eos]*self.max_length
     data[0] = self.bos
-    data[self.max_length-1] = self.eos
     word_count = 1
     for word in input_sentence.split():
       word = word.decode('utf8')
@@ -111,13 +110,18 @@ class sentiment_classifier(object):
       x_data = []
       y_data = []
       sen = []
+      cnt = 0
       with open(fp, 'r') as file:
         un_parse = file.readlines()
         for line in un_parse:
           line = line.strip('\n').split(' +++$+++ ')
+          if int(line[0]) == -1:
+            continue
           y_data.append([int(line[0])])
           x_data.append(self.tokenizer(line[1]))
           sen.append(line[1])
+          cnt += 1
+      print(cnt)
       return x_data, y_data, sen
     else:
       raise ValueError('Can not find dictionary file %s' % (fp) )
@@ -134,7 +138,8 @@ class sentiment_classifier(object):
       if sen != None:
         sen_batch = sen[start:end]
         yield x_batch, y_batch, sen_batch
-      yield x_batch, y_batch
+      else:
+        yield x_batch, y_batch
       i = end
 
   def train(self):
@@ -206,7 +211,7 @@ class sentiment_classifier(object):
       score = self.get_score(np.array([data]))
       print ('score: ' , score[0][0])
 
-  def test_f(self):
+  def generate(self):
     print ('loading previous model...')
     self.saver.restore(self.sess, tf.train.latest_checkpoint(self.model_dir))
     
@@ -216,7 +221,6 @@ class sentiment_classifier(object):
 
     for x, y, sen in self.get_batch(x_d, y_d, sen_d):
       score = self.get_score(x)
-
       for l, a, s in zip(sen, y, score):
         a, s = a[0], s[0]
         if s > 0.8:
